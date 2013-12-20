@@ -53,16 +53,238 @@ class SumIdx(sp.Basic):
         return self._chart == other.chart and self._label == other.label \
                                           and self._covar == other.covar
     
+
+
+class Tensor(sp.Basic):
+    
+    def __init__(self, indices, array=None):
+        
+        self._indices = indices
+        
+        if [(i,j) for i in range(len(indices)) for j in range(i+1, len(indices))\
+                        if indices[i] == indices[j]]:
+            raise IndexException("Same index appears at least twice in tensor.")
+        
+        (array, indices) = t_meth.eliminate_contractions(array, indices)
+
+        self._covar = list(map(lambda x: x.covar, indices))
+
+        if isinstance(array, np.ndarray):
+            array = array.squeeze()
+            shape = array.shape  
+        elif not array is None:
+            array = np.array(array, dtype=object)
+            shape = array.shape
+                      
+        self._shape = shape
+        self._rank = len(shape)
+        self.set_components(array)
+
+    
+    @property
+    def indices(self):
+        return self._indices
+    
+    @property
+    def chart(self):
+        return zip(self._indices, self._indices.chart)
+    
+    @property
+    def covar(self):
+        return self._covar   
+          
+    @property
+    def shape(self):
+        return self._shape
+    
+    @property
+    def rank(self):
+        return self._rank
+    
+    @property
+    def as_array(self):
+        """ needs a better name ???"""
+        return self._array
+    
+    def __str__(self):
+        return "Tensor, rank: %s, shape: %s, indices: %s, components: %s" \
+                %(self.rank, list(map(inv_covarar_dict.get, self._covar)), self._indices, \
+                self.as_array)
+                
+    def __eq__(self, other):
+        return self.shape == other.shape and \
+         np.all(self._array == other[tuple(self.indices)].as_array)  
+      
+          
+    def _get_TP_args(self, other):
+        return self.indices + other.indices
+
+
+    def set_components(self, array, components_range = None):
+        
+        if components_range is not None:
+            self._array[components_range] = array
+        else:       
+            if array is None:
+                self._array = np.empty(self.shape, dtype = object)
+            else:
+                if isinstance(array, np.ndarray):
+                    self._array = array
+                else:
+                    self._array = np.array(array, dtype=object)    
+ 
+          
+    def transpose(self, new_indices):
+        transpositions = t_meth.get_transposition_structure(self.indices, \
+                                                            new_indices)
+        new_array = t_meth.transpose(self._array, transpositions)
+        return Tensor(new_indices, new_array)
+
+
+
+    def _get_contraction_args(self, contractions):
+        dummyes = [x[0] for x in contractions] + [x[1] for x in contractions]
+        indices = [self._indices[i] for i in range(len(indices)) \
+                                        if i not in dummyes]
+        return indices
+
+    def contract(self, contractions):
+        new_array   = t_meth.contract(self._array, contractions)
+        new_indices = self._get_contraction_args(contractions)
+        return Tensor(new_indices, new_array)
+    
+    
+    def tensor_product(self, other):
+        new_array   = t_meth.tensor_product(self._array, other.as_array)
+        new_indices = self.indices + other.indices
+        return Tensor(new_indices, new_array)
+    
+
+    
+################################## TODO: REDESIGN #############################    
+    def _prepare_getslice(self, indices):
+        
+        if len(indices) != len(self._indices):
+            raise IndexException("Invalid slice.")
+        
+        array = self._array
+        
+        transpositions = [i for i in range(len(indices))]
+        
+        for idx in range(len(indices)):
+            if not isinstance(indices[idx], SumIdx):
+                continue
+            
+            transformation = t_meth.get_transformation_from_index(\
+                                    self._indices[idx], indices[idx])
+            
+            if transformation is not None:
+                    
+                tmp = transpositions[idx]   
+                transpositions = list(map(lambda x : x - 1*(x < tmp), transpositions))
+                transpositions[idx] = 0
+                    
+                array = t_meth.tensor_product(transformation, array)
+                array = t_meth.contract(array, (1, idx + 2))
+                
+        array = t_meth.transpose(array, transpositions)
+        new_indices = list(filter(lambda x : isinstance(x, SumIdx), indices))
+        return (array, new_indices)  
+    
+    def get_slice(self, slice_range):
+        """
+        form is a list of integers or other types:
+        for example form = [not int, not int, 1] return
+        slice [:, :, 1] because i don't see any needs of obtaining
+        tensors with lower dimensions
+        """
+        (array, args) = self._prepare_getslice(slice_range)
+        (rank, array) = t_meth.get_slice(array, slice_range)
+        return Tensor(args, array)
+    
+################################## TODO: REDESIGN END##########################        
+    
+    def apply_function(self, f):
+        return Tensor(self.indices, f(self._array)) 
+    
+    def __neg__(self):
+        return Tensor(self.indices, -self._array)
+    
+    
+################################## TODO: REDESIGN #############################     
+    def _check_conformance(self, other):
+        
+        if isinstance(other, type(self)):
+            if self.rank != other.rank:
+                raise IndexException("Tensors dimensions are different.")
+            if self.indices and any(filter(lambda x: x not in self._indices, other.indices)):
+                raise IndexException("Tensors indices mismatch.")
+        else:
+            if self.rank > 0:
+                raise IndexException("Tensors dimensions are different.")
+            
+    def _adjust_term(self, other):
+        if isinstance(other, type(self)):
+            array = t_meth.indexed_transpose(other.components, self.indices, other.indices)
+        else:
+            array = other
+        return array
+################################## TODO: REDESIGN END##########################   
+    
+        ############### DONE LINE ########################################## 
+    def __add__(self, other):
+        self._check_conformance(other)
+        c = self._adjust_term(other)
+        return self._return_tensor(self._base_arg, self._array + c)
+    
+    def __sub__(self, other):
+        self._check_conformance(other)
+        c = self._adjust_term(other)
+        return self._return_tensor(self._base_arg, self._array - c)
+    
+    
+    def __mul__(self, other):
+        if not isinstance(other, type(self)):
+            return self._return_tensor(self._base_arg, self._array * other)
+        else:
+            return self.tensor_product(other)
+    
+    def __rmul__(self, other):
+        if not isinstance(other, type(self)):
+            return self._return_tensor(self._base_arg, self._array * other)
+        else:
+            return other.tensor_product(self)
+        
+    def __truediv__(self, divisor):
+        return self._return_tensor(self._base_arg, self._array/divisor)    
+       
+    def __getitem__(self, indices):
+        if not is_sequence(indices):
+            indices = [indices]
+        else:
+            #### Bullshit ??????????????
+            indices = list(indices)
+        return self.get_slice(indices)
+
+    def __call__(self, args):
+        return self.transpose(args)
+ 
+
+
+
+
+
+"""
+
+
+
+
     
     
 class FreeTensor(object):
     
     def __init__(self, array, shape = None):
-        """
-        an abstract object with `rank` - dimensions, each with `dim` elements
-        for example matrix is rank 2 object
-        
-        """
+
         #super(FreeTensor, self).__init__()
 
         if isinstance(array, np.ndarray):
@@ -105,7 +327,6 @@ class FreeTensor(object):
         
     @property
     def components(self):
-        """ needs a better name ???"""
         return self._array
     
     
@@ -158,12 +379,7 @@ class FreeTensor(object):
         return self._return_tensor(self._base_arg + other._base_arg, array)
     
     def get_slice(self, slice_range):
-        """
-        form is a list of integers or other types:
-        for example form = [not int, not int, 1] return
-        slice [:, :, 1] because i don't see any needs of obtaining
-        tensors with lower dimensions
-        """
+
         (array, args) = self._prepare_getslice(slice_range)
         (rank, array) = t_meth.get_slice(array, slice_range)
         return self._return_tensor(args, array)
@@ -498,7 +714,7 @@ class MTensor(IndexedTensor):
     def __eq__(self, other):
         return self.shape == other.shape and \
          np.all(self._array == other[tuple(self.indices)].components)
-              
+"""              
               
        
 def get_dummy_idx(covar, chart = None):
