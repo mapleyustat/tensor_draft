@@ -1,5 +1,6 @@
 import sympy as sp
 import numpy as np
+from collections import Counter
 from sympy.core.compatibility import is_sequence
 
 import tensor_methods as t_meth
@@ -54,30 +55,60 @@ class SumIdx(sp.Basic):
                                           and self._covar == other.covar
     
 
+class CoordinateChart(sp.Basic):
+    
+    def __init__(self, label, coords):
+        super(CoordinateChart, self).__init__()
+        self._label = label   
+        self._metric = None
+        self._coords = coords
+        self._dim = len(coords)
+        
+        
+    @property 
+    def label(self):
+        return self._label
+    
+    @property
+    def dim(self):
+        return self._dim
+        
+    @property
+    def metric(self):
+        return self._metric
+    
+    def coords(self, index):
+        return Tensor([get_dummy_idx(1, index.chart)], \
+                       np.array(self._coords))[index]
+             
+    def set_metric(self, metric):
+        self._metric = metric
+    
+    @property
+    def raw_coords(self):
+        return self._coords
+    
+    def assign_indices(self, indices):
+        for i in indices:
+            i._chart = self
+
+
 
 class Tensor(sp.Basic):
     
     def __init__(self, indices, array=None):
         
-        self._indices = indices
         
-        if [(i,j) for i in range(len(indices)) for j in range(i+1, len(indices))\
+        if [(i,j) for i in range(len(indices)) \
+                    for j in range(i+1, len(indices)) \
                         if indices[i] == indices[j]]:
             raise IndexException("Same index appears at least twice in tensor.")
         
         (array, indices) = t_meth.eliminate_contractions(array, indices)
+        
+        self._indices = indices
+        self._covar = [x.covar for x in indices]
 
-        self._covar = list(map(lambda x: x.covar, indices))
-
-        if isinstance(array, np.ndarray):
-            array = array.squeeze()
-            shape = array.shape  
-        elif not array is None:
-            array = np.array(array, dtype=object)
-            shape = array.shape
-                      
-        self._shape = shape
-        self._rank = len(shape)
         self.set_components(array)
 
     
@@ -108,19 +139,25 @@ class Tensor(sp.Basic):
     
     def __str__(self):
         return "Tensor, rank: %s, shape: %s, indices: %s, components: %s" \
-                %(self.rank, list(map(inv_covarar_dict.get, self._covar)), self._indices, \
-                self.as_array)
+                %(self.rank, list(map(inv_covarar_dict.get, self._covar)), \
+                  self._indices, self.as_array)
                 
     def __eq__(self, other):
         return self.shape == other.shape and \
          np.all(self._array == other[tuple(self.indices)].as_array)  
       
-          
-    def _get_TP_args(self, other):
-        return self.indices + other.indices
-
 
     def set_components(self, array, components_range = None):
+        
+        if isinstance(array, np.ndarray):
+            array = array.squeeze()
+            shape = array.shape  
+        elif not array is None:
+            array = np.array(array, dtype=object)
+            shape = array.shape
+                      
+        self._shape = shape
+        self._rank = len(shape)
         
         if components_range is not None:
             self._array[components_range] = array
@@ -135,16 +172,15 @@ class Tensor(sp.Basic):
  
           
     def transpose(self, new_indices):
-        transpositions = t_meth.get_transposition_structure(self.indices, \
-                                                            new_indices)
-        new_array = t_meth.transpose(self._array, transpositions)
+        new_array = t_meth.indexed_transpose(self._array, self.indices, \
+                                                          new_indices)
         return Tensor(new_indices, new_array)
 
 
 
     def _get_contraction_args(self, contractions):
         dummyes = [x[0] for x in contractions] + [x[1] for x in contractions]
-        indices = [self._indices[i] for i in range(len(indices)) \
+        indices = [self._indices[i] for i in range(len(self._indices)) \
                                         if i not in dummyes]
         return indices
 
@@ -161,13 +197,68 @@ class Tensor(sp.Basic):
     
 
     
-################################## TODO: REDESIGN #############################    
+    def apply_function(self, f):
+        return Tensor(self.indices, f(self._array)) 
+    
+    def __neg__(self):
+        return Tensor(self.indices, -self._array)
+    
+   
+    def _check_conformance(self, other):
+        
+        if isinstance(other, type(self)):
+            if self.rank != other.rank:
+                raise IndexException("Tensors dimensions are different.")
+        if isinstance(other, Tensor):
+            if self.indices and any(filter(lambda x: x not in self.indices, \
+                                               other.indices)):
+                raise IndexException("Tensors indices mismatch.")
+        else:
+            if self.rank > 0:
+                raise IndexException("Tensors dimensions are different.")
+            
+    def _adjust_term(self, other):
+        if isinstance(other, Tensor):
+            array = t_meth.indexed_transpose(other.as_array, self.indices, \
+                                             other.indices)
+        else:
+            array = other
+        return array
+ 
+    
+    def __add__(self, other):
+        self._check_conformance(other)
+        c = self._adjust_term(other)
+        return Tensor(self.indices, self._array + c)
+    
+    def __sub__(self, other):
+        self._check_conformance(other)
+        c = self._adjust_term(other)
+        return Tensor(self.indices, self._array - c)
+    
+    
+    def __mul__(self, other):
+        if not isinstance(other, Tensor):
+            return Tensor(self.indices, self._array * other)
+        else:
+            return self.tensor_product(other)
+    
+    def __rmul__(self, other):
+        if not isinstance(other, Tensor):
+            return Tensor(self.indices, self._array * other)
+        else:
+            return other.tensor_product(self)
+        
+    def __truediv__(self, divisor):
+        return Tensor(self.indices, self._array/divisor)    
+       
+          
     def _prepare_getslice(self, indices):
         
         if len(indices) != len(self._indices):
             raise IndexException("Invalid slice.")
         
-        array = self._array
+        new_array = self._array
         
         transpositions = [i for i in range(len(indices))]
         
@@ -175,21 +266,23 @@ class Tensor(sp.Basic):
             if not isinstance(indices[idx], SumIdx):
                 continue
             
-            transformation = t_meth.get_transformation_from_index(\
+            transformation = t_meth.get_transformation_from_index(          \
                                     self._indices[idx], indices[idx])
             
             if transformation is not None:
                     
                 tmp = transpositions[idx]   
-                transpositions = list(map(lambda x : x - 1*(x < tmp), transpositions))
+                transpositions = [x - 1*(x < tmp) for x in transpositions]
+                # Why the fucking minus. Can't understand now
+                #list(map(lambda x : x - 1*(x < tmp), transpositions))
                 transpositions[idx] = 0
                     
-                array = t_meth.tensor_product(transformation, array)
-                array = t_meth.contract(array, (1, idx + 2))
-                
-        array = t_meth.transpose(array, transpositions)
+                new_array = t_meth.tensor_product(transformation, new_array)
+                new_array = t_meth.contract(new_array, (1, idx + 2))
+
+        new_array = t_meth.transpose(new_array, transpositions)
         new_indices = list(filter(lambda x : isinstance(x, SumIdx), indices))
-        return (array, new_indices)  
+        return (new_array, new_indices)  
     
     def get_slice(self, slice_range):
         """
@@ -202,69 +295,14 @@ class Tensor(sp.Basic):
         (rank, array) = t_meth.get_slice(array, slice_range)
         return Tensor(args, array)
     
-################################## TODO: REDESIGN END##########################        
-    
-    def apply_function(self, f):
-        return Tensor(self.indices, f(self._array)) 
-    
-    def __neg__(self):
-        return Tensor(self.indices, -self._array)
-    
-    
-################################## TODO: REDESIGN #############################     
-    def _check_conformance(self, other):
-        
-        if isinstance(other, type(self)):
-            if self.rank != other.rank:
-                raise IndexException("Tensors dimensions are different.")
-            if self.indices and any(filter(lambda x: x not in self._indices, other.indices)):
-                raise IndexException("Tensors indices mismatch.")
-        else:
-            if self.rank > 0:
-                raise IndexException("Tensors dimensions are different.")
-            
-    def _adjust_term(self, other):
-        if isinstance(other, type(self)):
-            array = t_meth.indexed_transpose(other.components, self.indices, other.indices)
-        else:
-            array = other
-        return array
-################################## TODO: REDESIGN END##########################   
-    
-        ############### DONE LINE ########################################## 
-    def __add__(self, other):
-        self._check_conformance(other)
-        c = self._adjust_term(other)
-        return self._return_tensor(self._base_arg, self._array + c)
-    
-    def __sub__(self, other):
-        self._check_conformance(other)
-        c = self._adjust_term(other)
-        return self._return_tensor(self._base_arg, self._array - c)
-    
-    
-    def __mul__(self, other):
-        if not isinstance(other, type(self)):
-            return self._return_tensor(self._base_arg, self._array * other)
-        else:
-            return self.tensor_product(other)
-    
-    def __rmul__(self, other):
-        if not isinstance(other, type(self)):
-            return self._return_tensor(self._base_arg, self._array * other)
-        else:
-            return other.tensor_product(self)
-        
-    def __truediv__(self, divisor):
-        return self._return_tensor(self._base_arg, self._array/divisor)    
-       
     def __getitem__(self, indices):
         if not is_sequence(indices):
             indices = [indices]
         else:
             #### Bullshit ??????????????
             indices = list(indices)
-        return self.get_slice(indices)
+        return self.get_slice(indices)           
+       
 
     def __call__(self, args):
         return self.transpose(args)
@@ -540,41 +578,7 @@ class Manifold(sp.Basic):
         
         
         
-class CoordinateChart(sp.Basic):
-    
-    def __init__(self, label, manifold, coords):
-        super(CoordinateChart, self).__init__()
-        self._label = label   
-        self._manifold = manifold
-        self._metric = None
-        self._coords = coords
-        
-        
-    @property 
-    def label(self):
-        return self._label
-    
-    @property
-    def dim(self):
-        return self._manifold.dim
-        
-    @property
-    def metric(self):
-        return self._metric
-    
-    def coords(self, index):
-        return MTensor([get_dummy_idx(1, index.chart)], np.array(self._coords))[index]
-             
-    def set_metric(self, metric):
-        self._metric = metric
-    
-    @property
-    def raw_coords(self):
-        return self._coords
-    
-    def assign_indices(self, indices):
-        for i in indices:
-            i._chart = self
+
         
         
         

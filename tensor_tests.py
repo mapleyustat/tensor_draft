@@ -9,32 +9,31 @@ assert(-idx1 == SumIdx("i", -1))
 idx2 = SumIdx("j", -1)
 assert(-idx2 == SumIdx("j"))
 
-### Free Tensors tests
-i = SumIdx("i")
+
+### Algebraic properties
+i, j = map(SumIdx,["i", "j"])
 a = np.array([[1, 2, 3, 4],[5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]])
-ft = FreeTensor(a)
-assert(ft  == FreeTensor(a))
-assert(-ft == FreeTensor(-a))
-assert(ft.contract([(0,1)]) == FreeTensor(34))
-assert(ft.transpose((1,0))  == FreeTensor(a.transpose()))
-assert(ft[1,i]          == FreeTensor(a[1,:]))
-assert(ft[0,i]*ft[0,i]  == FreeTensor([[1,2,3,4],[2,4,6,8], \
-                                       [3,6,9,12],[4,8,12,16]]))
-assert(2 * ft == ft * 2 == FreeTensor(2*a))
-             
-### Indexed Tensors tests
+ft = Tensor([i, j], a)
+assert(ft                   == Tensor([j, i], a))
+assert(-ft                  == Tensor([i, j], -a))
+assert(ft.contract([(0,1)]) == Tensor([], 34))
+assert(ft.transpose([j,i])  == Tensor([i, j], a.transpose()))
+assert(ft[1,i]              == Tensor([i], a[1,:]))
+assert(ft[0,i]*ft[0,j]      == Tensor([i,j], [[1,2,3,4],[2,4,6,8], \
+                                              [3,6,9,12],[4,8,12,16]]))
+assert(2 * ft == ft * 2 == Tensor([i,j], 2*a))
+        
 i, j, k = map(SumIdx, ["i", "j", "k"])
 s = np.array([[1, 2],[2, 4]])
 a = np.array([[0, -8],[8, 0]])
-it1 = IndexedTensor([i,-j], a + s)
-it2 = IndexedTensor([-j,i], a + s)
-assert((it1 + it2)/2 == IndexedTensor([i, -j], s))
-assert((it1 - it2)/2 == IndexedTensor([i, -j], a))
-assert(it1 - it2 == it1 + (-it2))
-assert(it1[i,-j]*it1[j, -k] == IndexedTensor([i, -j], np.dot(a+s, a+s)))
-assert(it1[i,-j]*it2[-i, k] == IndexedTensor([-j, k], \
-                                             np.dot((a+s).transpose(), a+s)))
-assert(it1[0,0] == IndexedTensor([], 1))
+it1 = Tensor([i,-j], a + s)
+it2 = Tensor([-j,i], a + s)
+assert((it1 + it2)/2        == Tensor([i, -j], s))
+assert((it1 - it2)/2        == Tensor([i, -j], a))
+assert(it1[i,-j]*it1[j, -k] == Tensor([i, -j], np.dot(a+s, a+s)))
+assert(it1[i,-j]*it2[-i, k] == Tensor([-j, k], np.dot((a+s).transpose(), a+s)))
+assert(it1[0,0]             == Tensor([], 1))
+print("Passed.")     
 
 ### MTensors tests
 i, j, k = map(SumIdx, ['i', 'j', 'k'])
@@ -85,5 +84,4 @@ assert(get_Curvature(sphere) == MTensor([], 2/a**2))
 ### Special Tensors tests    
 
 
-print("Passed.")
 
