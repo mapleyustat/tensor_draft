@@ -32,56 +32,52 @@ assert((it1 + it2)/2        == Tensor([i, -j], s))
 assert((it1 - it2)/2        == Tensor([i, -j], a))
 assert(it1[i,-j]*it1[j, -k] == Tensor([i, -j], np.dot(a+s, a+s)))
 assert(it1[i,-j]*it2[-i, k] == Tensor([-j, k], np.dot((a+s).transpose(), a+s)))
-assert(it1[0,0]             == Tensor([], 1))
-print("Passed.")     
+assert(it1[0,0]             == Tensor([], 1))   
 
-### MTensors tests
+### Tensors on manifolds tests
 i, j, k = map(SumIdx, ['i', 'j', 'k'])
 t, x = sp.symbols("t x")
 
-M2 = Manifold("M2", 2)
+minkoswki = CoordinateChart("orth", [t, x])
+minkoswki.assign_indices([i, j, k])
 
-decart = CoordinateChart("orth", M2, [t, x])
-decart.assign_indices([i, j, k])
+g = Metric([-1, -1], minkoswki, np.diag([-1, 1]))
 
-g = Metric([-1, -1], decart, np.diag([-1, 1]))
+assert(g[i, j] == Tensor([i, j], np.diag([-1, 1])))
 
-assert(g[i, j] == MTensor([i, j], np.diag([-1, 1])))
+mt = Tensor([i, j], [[1, 2], [3, 4]])
 
-mt = MTensor([i, j], [[1, 2], [3, 4]])
+assert(mt[ i,  j] == Tensor([ i,  j], [[ 1,  2], [ 3,  4]]))
+assert(mt[ i, -j] == Tensor([ i, -j], [[-1,  2], [-3,  4]]))
+assert(mt[-i,  j] == Tensor([-i,  j], [[-1, -2], [ 3,  4]]))
+assert(mt[-i, -j] == Tensor([-i, -j], [[ 1, -2], [-3,  4]]))
 
-assert(mt[ i,  j] == MTensor([ i,  j], [[ 1,  2], [ 3,  4]]))
-assert(mt[ i, -j] == MTensor([ i, -j], [[-1,  2], [-3,  4]]))
-assert(mt[-i,  j] == MTensor([-i,  j], [[-1, -2], [ 3,  4]]))
-assert(mt[-i, -j] == MTensor([-i, -j], [[ 1, -2], [-3,  4]]))
 
 ### Curvature related Tensors tests
 
-M2 = Manifold("M2", 2)
 a, theta, phi = sp.symbols("a theta phi")
 i, j, k, l = map(SumIdx, ["i", "j", "k", "l"])
-a_gdd = [
-    [a**2, 0],
-    [0, a**2*sp.sin(theta)**2]
-    ]
     
-sphere = CoordinateChart("sph", M2, [theta, phi])
+sphere = CoordinateChart("sph", [theta, phi])
 sphere.assign_indices([i,j,k,l])
 
+a_gdd = [ [a**2, 0], [0, a**2*sp.sin(theta)**2] ]
 g_sph = Metric([-1, -1], sphere, np.array(a_gdd))
 
-assert(g_sph[i, j] == MTensor([i, j], [[1/a**2, 0],\
-                                       [0, 1/(a*sp.sin(theta))**2]]))
-                                       
+assert(g_sph[i, j] == Tensor([i, j], [[1/a**2, 0],\
+                                      [0, 1/(a*sp.sin(theta))**2]]))
+
 assert(get_Cristoffel_symbol(sphere, [i, -j, -k]) ==               \
-       MTensor([i, -j, -k], [ [[0, 0],                             \
+        Tensor([i, -j, -k], [ [[0, 0],                             \
                                [0, -sp.sin(theta)*sp.cos(theta)]], \
                               [[0, sp.cos(theta)/sp.sin(theta)], 
                                [sp.cos(theta)/sp.sin(theta), 0]] ]))
 
-assert(get_Curvature(sphere) == MTensor([], 2/a**2))
+assert(get_Curvature(sphere) == Tensor([], 2/a**2))
 
 ### Special Tensors tests    
 
+
+print("Passed.")  
 
 

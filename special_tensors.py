@@ -22,16 +22,13 @@ class CoordinateDerivative(object):
         return CoordinateDerivative(index)
     
     def __call__(self, tensor):
-        if isinstance(tensor, MTensor):
-            array = tensor.components
-            new_array = np.array([v_diff(array, x)                       \
+        if isinstance(tensor, Tensor):
+            array = tensor.as_array
+            new_array = np.array([v_diff(array, x)                        \
                                   for x in self._index.chart.raw_coords], \
                                   dtype = object)
-            return tensor._return_tensor([get_dummy_idx(-1, self._index.chart)]\
-                    + tensor.indices, new_array)[[self._index] + tensor.indices]
-        else:
-            array = [sp.diff(tensor, x) for x in self._index.chart.raw_coords]
-            return MTensor([get_dummy_idx(-1, self._index.chart)], array)[self._index]
+            return Tensor([get_dummy_idx(-1, self._index.chart)]\
+                   + tensor.indices, new_array)[[self._index] + tensor.indices]
 
 
 def get_Cristoffel_symbol(chart, indices):
@@ -42,7 +39,7 @@ def get_Cristoffel_symbol(chart, indices):
     metric_deriv = CD[-mu](chart.metric[-rho, -nu])
     gamma_udd = (chart.metric[l, rho] * (metric_deriv[-mu, -rho, -nu] \
                 + metric_deriv[-nu, -mu, -rho] \
-                - metric_deriv[-rho, -mu, -nu]))/2
+                - metric_deriv[-rho, -mu, -nu]))*sp.Rational(1,2)
     return gamma_udd.transpose([l, -mu, -nu])[indices]
 
 
@@ -51,14 +48,14 @@ def kronecker_delta(indices):
     dim = indices[0].chart.dim
     if not all(map(lambda x : x.chart.dim == dim, indices)):
         raise IndexException("Dimensions mismatch")
-    return MTensor(indices, sp.eye(dim).tolist())
+    return Tensor(indices, sp.eye(dim).tolist())
 
 
 def levi_civita(indices):
     v_lc = np.vectorize(sp.LeviCivita)
     def_indices = [get_dummy_idx(1, i.chart) for i in indices]
     dimensions = [x.chart.dim for x in indices]
-    return MTensor(def_indices, np.fromfunction(v_lc, \
+    return Tensor(def_indices, np.fromfunction(v_lc, \
                    dimensions, dtype = object))[indices]
 
  
@@ -94,13 +91,13 @@ def get_Curvature( chart ):
 def get_Einstein( chart, indices ):
     l = get_dummy_idx(1, chart)
     R = get_Ricci( chart, indices )
-    curv = sp.simplify(R[-l, l].components.tolist())
+    curv = sp.simplify(R[-l, l].as_array.tolist())
     return (R - sp.Rational(1,2) * chart.metric[indices] * curv)
     
 def get_dummy_vector( label, index, *args ):
     array = [sp.symbols(label + str(i), cls=sp.Function)(*args) \
              for i in range(index.chart.dim)]
-    return MTensor([index], array)
+    return Tensor([index], array)
     
 ### Wrappers around sympy functions
 
