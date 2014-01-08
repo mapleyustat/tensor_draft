@@ -123,7 +123,7 @@ class Metric(object):
                 return Tensor(list(indices), self._uu) 
 
 
-class CoordinateChart(sp.Basic):
+class CoordinateChart(object):
     
     def __init__(self, label, coords):
         super(CoordinateChart, self).__init__()
@@ -162,7 +162,7 @@ class CoordinateChart(sp.Basic):
 
 
 
-class Tensor(sp.Basic):
+class Tensor(object):
     
     def __init__(self, indices, array=None):
         
@@ -341,8 +341,6 @@ class Tensor(sp.Basic):
                     
                 tmp = transpositions[idx]   
                 transpositions = [x - 1*(x < tmp) for x in transpositions]
-                # Why the fucking minus. Can't understand now
-                #list(map(lambda x : x - 1*(x < tmp), transpositions))
                 transpositions[idx] = 0
                     
                 new_array = t_meth.tensor_product(transformation, new_array)
