@@ -54,10 +54,11 @@ dec.assign_indices([i, j, k])
 
 g   = Metric([-1, -1], dec, np.diag([1, -1]))
 CD  = CoordinateDerivative(i)
-print(CD[i](x))
-L = Rational(1,2)*(CD[-i](phi) * CD[i](phi)) - lam/2*(phi**2 - v**2)**2
+
+L = Rational(1,2)*(CD[-i](phi) * CD[i](phi)) \
+        - Rational(1,2) * lam*(phi**2 - v**2)**2
 print("Lagrangian density:")
-pprint(Eq(Symbol("L"), L.components.tolist()))
+pprint(Eq(Symbol("L"), L.as_array.tolist()))
 
 T = t_diff(L, CD[-i](phi))*CD[-j](phi) - kronecker_delta([i, -j]) * L
 
@@ -69,7 +70,7 @@ kink_solution = v * tanh(v * sqrt(lam) * (x - u*t - x0)/sqrt(1 - u**2))
 print("\nStatic Kink solution:")
 pprint(Eq(phi, kink_solution))
 
-T00 = simplify(T[i,j].components[0,0].subs(phi, kink_solution).doit())
+T00 = simplify(T[i,j].as_array[0,0].subs(phi, kink_solution).doit())
 print("\nEnergy density:")
 pprint(Eq(Symbol('T^00'), T00))
 print("\nEnergy:")

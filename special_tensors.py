@@ -29,6 +29,10 @@ class CoordinateDerivative(object):
                                   dtype = object)
             return Tensor([get_dummy_idx(-1, self._index.chart)]\
                    + tensor.indices, new_array)[[self._index] + tensor.indices]
+        else:
+            array = [sp.diff(tensor, x) for x in self._index.chart.raw_coords]
+            return Tensor([get_dummy_idx(-1, self._index.chart)], \
+                          array)[self._index]
 
 
 def get_Cristoffel_symbol(chart, indices):
@@ -108,7 +112,7 @@ def t_diff(tensor, *symbols, **kwargs):
     expr = symbols[0]
     if isinstance(expr, type(tensor)):
         derivative = expr.apply_function(np.vectorize(DerOp))
-        derivative._indices = map(lambda x : -x, derivative.indices)
+        derivative._indices = list(map(lambda x : -x, derivative.indices))
         return derivative*tensor
     else:
         v_diff = np.vectorize(lambda expr : sp.diff(expr, *symbols, **kwargs))
