@@ -5,6 +5,7 @@ from Tensor import *
 
 def transpose(array, components):
     """ just a wrapper """
+    #print(components)
     return np.transpose(array, components)
 
 
@@ -38,7 +39,7 @@ def get_slice(array, slice_range):
     while extract != []:
         elem = extract.pop()
         array = np.take(array, [elem[1]], axis=elem[0])
-#        extract = list(map(lambda x: (x[0] - 1*(x[0] > elem[0]) , x[1]), extract))
+        extract = list(map(lambda x: (x[0] - 1*(x[0] > elem[0]) , x[1]), extract))
     array = np.squeeze(array)
     return (rank, array)
 
@@ -51,7 +52,7 @@ def contract(array, contractions):
     """ 
     # contractions_left is either a tuple or a list of tuples axes to contract
     # contractions_left just a copy of contractions, 'cause we're going original
-               
+
     if isinstance(contractions, list):
         contractions_left = contractions[:]
         while contractions_left != []:
@@ -59,9 +60,9 @@ def contract(array, contractions):
             array = array.diagonal(axis1=idc[0], axis2=idc[1]).sum(axis=-1)
             # now we adjusting contractions_left to accomodate vanishing of
             # 2 dimensions
-            contractions_left = list(map(lambda x, y: 
-                                         ( x - 1*(x>idc[0]) - 1*(x>idc[1]),   \
-                                           y - 1*(y>idc[0]) - 1*(y>idc[1]) ), \
+            contractions_left = list(map(lambda xy: 
+                                         ( xy[0] - 1*(xy[0]>idc[0]) - 1*(xy[0]>idc[1]),   \
+                                           xy[1] - 1*(xy[1]>idc[0]) - 1*(xy[1]>idc[1]) ), \
                                          contractions_left))
     else:
         array = array.diagonal(axis1=contractions[0], \

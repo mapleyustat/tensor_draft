@@ -340,7 +340,7 @@ class Tensor(object):
             if transformation is not None:
                     
                 tmp = transpositions[idx]   
-                transpositions = [x - 1*(x < tmp) for x in transpositions]
+                transpositions = [x + 1*(x < tmp) for x in transpositions]
                 transpositions[idx] = 0
                     
                 new_array = t_meth.tensor_product(transformation, new_array)
@@ -355,7 +355,7 @@ class Tensor(object):
         """
         form is a list of integers or other types:
         for example form = [not int, not int, 1] return
-        slice [:, :, 1] because i don't see any needs of obtaining
+        slice [:, :, 1] because i don't see any need in obtaining
         tensors with lower dimensions
         """
         (array, args) = self._prepare_getslice(slice_range)

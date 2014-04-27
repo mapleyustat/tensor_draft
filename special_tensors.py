@@ -46,6 +46,29 @@ def get_Cristoffel_symbol(chart, indices):
                 - metric_deriv[-rho, -mu, -nu]))*sp.Rational(1,2)
     return gamma_udd.transpose([l, -mu, -nu])[indices]
 
+def covariant_derivative(index, tensor):
+    """Only works with homogeneous indicex"""
+
+    a, b, c, d = map(get_dummy_idx, [1, 1, 1, 1])
+    chart = index.chart
+    chart.assign_indices([a, b, c, d])
+    
+    CD = CoordinateDerivative()
+    result = CD[index](tensor)
+    Gamma = get_Cristoffel_symbol(chart, [a, -b, -c])
+
+    for i in range(len(tensor.indices)):
+        t_i = tensor.indices[i]
+        tmp_idx = tensor.indices[:]
+        if t_i.covar == 1:
+            tmp_idx[i] = d
+            result += Gamma[t_i, -d, index] * tensor[tmp_idx]
+        else:
+            tmp_idx[i] = -d
+            result -= Gamma[d, t_i, index] * tensor[tmp_idx]
+        
+    return result
+
 
 
 def kronecker_delta(indices):
